@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de Sons - Juliette Psicose 2D</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #2a2a2a;
+            color: white;
+            padding: 20px;
+        }
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 15px;
+            background: #4a90e2;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #357abd;
+        }
+        .sound-info {
+            background: #3a3a3a;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        h1 {
+            text-align: center;
+            color: #ff6b6b;
+        }
+        .status {
+            background: #4a4a4a;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎵 Gerador de Sons - Juliette Psicose 2D</h1>
+    
+    <div class="status">
+        <p><strong>Status:</strong> <span id="status">Pronto para gerar sons</span></p>
+    </div>
+
+    <div class="sound-info">
+        <h3>🔫 Sons de Tiro</h3>
+        <div class="controls">
+            <button onclick="playTestSound('shoot', 440, 150)">🔫 Tiro Normal (440Hz)</button>
+            <button onclick="playTestSound('shoot', 520, 150)">🔫 Spread Gun (520Hz)</button>
+            <button onclick="playTestSound('shoot', 660, 150)">🔫 Laser Gun (660Hz)</button>
+            <button onclick="playTestSound('shoot', 380, 150)">🔫 Machine Gun (380Hz)</button>
+        </div>
+    </div>
+
+    <div class="sound-info">
+        <h3>⚡ Sons de Ação</h3>
+        <div class="controls">
+            <button onclick="playTestSound('jump', 330, 200)">🦘 Pulo (330Hz)</button>
+            <button onclick="playTestSound('chainAttack', 280, 400)">⛓️ Corrente 2 Mãos (280Hz)</button>
+            <button onclick="playTestSound('chainAttack', 320, 400)">⛓️ Corrente 1 Mão (320Hz)</button>
+            <button onclick="playTestSound('celebration', 550, 500)">🎉 Celebração (550Hz)</button>
+        </div>
+    </div>
+
+    <div class="sound-info">
+        <h3>💥 Sons de Combate</h3>
+        <div class="controls">
+            <button onclick="playTestSound('enemyHit', 600, 100)">💥 Inimigo Atingido (600Hz)</button>
+            <button onclick="playTestSound('enemyDestroy', 300, 300)">💀 Inimigo Destruído (300Hz)</button>
+            <button onclick="playTestSound('playerHit', 200, 400)">😵 Jogador Atingido (200Hz)</button>
+            <button onclick="playTestSound('powerup', 800, 200)">💎 Power-up (800Hz)</button>
+        </div>
+    </div>
+
+    <div class="sound-info">
+        <h3>🎮 Sons de Sistema</h3>
+        <div class="controls">
+            <button onclick="playTestSound('levelUp', 700, 600)">📈 Level Up (700Hz)</button>
+            <button onclick="playTestSound('gameOver', 150, 1000)">💀 Game Over (150Hz)</button>
+            <button onclick="toggleSounds()">🔇 Ligar/Desligar Sons</button>
+        </div>
+    </div>
+
+    <div class="sound-info">
+        <h3>📝 Instruções</h3>
+        <p>Este gerador usa a Web Audio API para criar sons procedurais em tempo real.</p>
+        <p>Os sons são gerados matematicamente usando osciladores de diferentes frequências.</p>
+        <p>Clique nos botões para testar cada som do jogo!</p>
+        <p><strong>Nota:</strong> Os sons funcionam melhor no Chrome/Edge. Alguns navegadores podem ter limitações.</p>
+    </div>
+
+    <script>
+        let audioEnabled = true;
+        let volume = 0.3;
+
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+
+        function playTestSound(soundName, frequency = 440, duration = 200, waveType = 'sine') {
+            if (!audioEnabled) {
+                updateStatus('Sons desabilitados');
+                return;
+            }
+
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                // Configurar tipo de onda baseado no som
+                switch(soundName) {
+                    case 'shoot':
+                        oscillator.type = 'square';
+                        break;
+                    case 'enemyHit':
+                        oscillator.type = 'sawtooth';
+                        break;
+                    case 'enemyDestroy':
+                        oscillator.type = 'triangle';
+                        break;
+                    case 'chainAttack':
+                        oscillator.type = 'sawtooth';
+                        break;
+                    case 'celebration':
+                        oscillator.type = 'sine';
+                        break;
+                    case 'jump':
+                        oscillator.type = 'triangle';
+                        break;
+                    case 'powerup':
+                        oscillator.type = 'sine';
+                        break;
+                    case 'levelUp':
+                        oscillator.type = 'triangle';
+                        break;
+                    case 'gameOver':
+                        oscillator.type = 'sawtooth';
+                        break;
+                    default:
+                        oscillator.type = 'sine';
+                }
+                
+                oscillator.frequency.value = frequency;
+                
+                // Envelope de volume para efeito mais natural
+                gainNode.gain.setValueAtTime(volume * 0.1, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration / 1000);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + duration / 1000);
+                
+                updateStatus(`Tocando: ${soundName} (${frequency}Hz, ${duration}ms)`);
+                
+                // Limpar status após o som
+                setTimeout(() => {
+                    updateStatus('Pronto para gerar sons');
+                }, duration + 100);
+                
+            } catch (e) {
+                updateStatus(`Erro: Web Audio não suportado - ${e.message}`);
+                console.error('Erro ao gerar som:', e);
+            }
+        }
+
+        function toggleSounds() {
+            audioEnabled = !audioEnabled;
+            updateStatus(audioEnabled ? 'Sons habilitados' : 'Sons desabilitados');
+        }
+
+        // Testar compatibilidade
+        window.addEventListener('load', () => {
+            if (typeof AudioContext !== 'undefined' || typeof webkitAudioContext !== 'undefined') {
+                updateStatus('Web Audio API disponível - Sons funcionarão!');
+            } else {
+                updateStatus('Web Audio API não suportada neste navegador');
+            }
+        });
+
+        // Adicionar contexto de audio após interação do usuário (requerido pelos navegadores modernos)
+        document.addEventListener('click', function initAudioContext() {
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (AudioContextClass) {
+                const audioContext = new AudioContextClass();
+                if (audioContext.state === 'suspended') {
+                    audioContext.resume();
+                }
+            }
+            document.removeEventListener('click', initAudioContext);
+        }, { once: true });
+    </script>
+</body>
+</html>

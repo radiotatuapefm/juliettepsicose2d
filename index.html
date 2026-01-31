@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="gemini-api-key" content="AIzaSyC8DmVNzXfq5_VZoWw8KzCMhE3KlsJfYLs">
+    <title>Juliette Psicose 2D - Jogo Responsivo</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="gameContainer">
+        <div class="game-info">
+            Juliette Psicose 2D - Tela Adaptável
+        </div>
+        <canvas id="gameCanvas"></canvas>
+        <button id="fullscreenBtn" class="fullscreen-btn" title="Tela Cheia (F11)">
+            📺 F11
+        </button>
+
+        <!-- Ajustes rápidos do mostrador de ângulos -->
+        <div id="aimSettings" class="aim-settings" title="Ajustes do mostrador de ângulos">
+            <div class="aim-settings-title">🎯 ÂNGULOS</div>
+            <label class="aim-settings-row">
+                <span>Opacidade</span>
+                <input id="aimOpacity" type="range" min="0.03" max="0.30" step="0.01" value="0.12">
+            </label>
+            <label class="aim-settings-row">
+                <span>Tamanho</span>
+                <input id="aimScale" type="range" min="0.70" max="1.60" step="0.05" value="1.00">
+            </label>
+            <div class="aim-settings-hint">↑/↓: toque ou segure • [ ]: fino</div>
+        </div>
+
+        <div class="controls">
+            🏃 Setas: Mover/Mirar | ⚔️ Espaço/X: Atirar | 🦘 Z: Pular | 🔄 R: Reiniciar<br>
+            🎯 Múltiplas armas | 💎 Power-ups | 👾 Inimigos inteligentes | 💥 Explosões épicas!<br>
+            🎵 <strong>NOVO:</strong> Sons dinâmicos | ⚛️ Inimigos com átomos orbitantes | 🔊 M: Ligar/Desligar Sons
+        </div>
+    </div>
+    
+    <!-- Controles Touch para Mobile -->
+    <div id="mobileControls" class="mobile-controls">
+        <!-- Controles de Movimento (Esquerda) -->
+        <div class="controls-left">
+            <div class="dpad">
+                <div class="dpad-button dpad-up" data-key="ArrowUp">↑</div>
+                <div class="dpad-button dpad-down" data-key="ArrowDown">↓</div>
+                <div class="dpad-button dpad-left" data-key="ArrowLeft">←</div>
+                <div class="dpad-button dpad-right" data-key="ArrowRight">→</div>
+                <div class="dpad-center"></div>
+            </div>
+        </div>
+
+        <!-- Seletor de Armas (Centro) -->
+        <div class="controls-center">
+            <!-- Seletor de Armas em 2 linhas -->
+            <div class="weapon-selector">
+                <div class="weapon-button" data-key="Digit1" title="Arma Normal">1</div>
+                <div class="weapon-button" data-key="Digit2" title="Tiro Triplo">2</div>
+                <div class="weapon-button" data-key="Digit3" title="Laser">3</div>
+                <div class="weapon-button" data-key="Digit4" title="Metralhadora">4</div>
+                <div class="weapon-button" data-key="Digit5" title="Plasma">5</div>
+                <div class="weapon-button" data-key="Digit6" title="Tempestade">6</div>
+                <div class="weapon-button" data-key="Digit7" title="Nuclear">7</div>
+                <div class="weapon-button" data-key="Digit8" title="Especial">8</div>
+            </div>
+        </div>
+        
+        <!-- Controles de Ação (Direita) -->
+        <div class="controls-right">
+            <div class="action-buttons">
+                <div class="action-button secondary" data-key="KeyZ" id="jumpBtn">
+                    🦘
+                </div>
+                <div class="action-button primary" data-key="Space" id="shootBtn">
+                    🔫
+                </div>
+                <div class="action-button secondary" data-key="KeyS" id="doubleChainBtn" title="Corrente Dupla">
+                    ⛓️⛓️
+                </div>
+                <div class="action-button secondary" data-key="KeyA" id="chainBtn">
+                    ⛓️
+                </div>
+                <div class="action-button secondary" data-key="KeyB" id="bombBtn">
+                    💣
+                </div>
+                <div class="action-button secondary" data-key="KeyM" id="soundBtn">
+                    🔊
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="gemini_integration.js?v=2"></script>
+    <script src="game.js?v=20260131_8"></script>
+</body>
+</html>
