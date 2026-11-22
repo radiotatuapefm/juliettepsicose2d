@@ -16,15 +16,15 @@ Um jogo run-and-gun 2D inspirado em Contra, protagonizado pela personagem Juliet
 - **Invulnerabilidade Temporária**: Proteção após receber dano
 
 ### 🎭 Sistema de Animações
-- **9 Sprites Específicas**: Cada ação tem sua animação única
+- **Animações SpriteForge**: seis sequências de oito quadros PNG transparentes (idle, walk, run, jump, hit e death)
 - **Animações de Tiro**: Diferentes sprites para ângulos de tiro específicos
 - **Animações Especiais**: Correntes, celebração, mãos para cima
 
 ### 👾 Inimigos Diversos
-- **Formas Geométricas**: Inimigos aparecem como quadrados, círculos e triângulos
+- **Sprites compartilhados**: soldados, robôs e chefões usam os mesmos PNGs SpriteForge da Juliette, sem duplicação de imagens
 - **Tipos Variados**: Soldados, robôs e chefões com características únicas
 - **Átomos Orbitantes**: Efeito visual de partículas orbitando os inimigos
-- **IA Básica**: Padrões de movimento e ataque
+- **IA Básica**: Padrões de movimento, salto, pausa e ataque; cada inimigo mantém seu próprio estado de animação
 
 ### 🌋 Recursos Especiais
 - **Disco de Lava Flutuante**: Power-up especial que segue o jogador
@@ -120,7 +120,8 @@ Juliette-Psicose-2D/
 
 ## 🎨 Assets Necessários
 
-- Spritesheet da Juliette (9 poses diferentes)
+- PNGs SpriteForge em `assets/{idle,walk,run,jump,hit,death}/frames/` (oito quadros por sequência)
+- Spritesheet e imagens especiais ainda utilizadas pelas ações e disparos da protagonista
 - Fundos para fase 1 e fase 2
 - Cena de primeiro plano
 - Sons (opcionais, com fallback para Web Audio)
@@ -137,7 +138,8 @@ Juliette-Psicose-2D/
 - **+2500 linhas** de código JavaScript
 - **9 sprites** específicas da protagonista
 - **7 tipos** de armas
-- **3 formas** geométricas para inimigos
+- **6 animações** SpriteForge compartilhadas entre protagonista e inimigos
+- **3 classes** de inimigos: soldados, robôs e chefões
 - **2 fases** com mecânicas diferentes
 - **Sistema completo** de HUD e controles
 - **Sistema de FPS** adaptativo para Mobile/Desktop
@@ -150,4 +152,34 @@ Juliette-Psicose-2D/
 *Um tributo aos clássicos jogos run-and-gun dos anos 90, com tecnologia moderna!*
 
 <img width="1365" height="767" alt="image" src="https://github.com/user-attachments/assets/d463e768-ca0c-4bee-a86f-24bd83e2d642" />
+
+
+
+## 🆕 Nova animação de ataque (8 quadros)
+
+- Sequência frontal de disparo com preparação, clarão, recuo e retorno.
+- Oito PNGs individuais em `assets/attack/attack_000.png` até `attack_007.png`.
+- Transparência RGBA preservada; cada quadro mede 384 × 512 px.
+- Reprodução única a 10 FPS, com temporização adaptada ao limite de 60 FPS (desktop) e 45 FPS (mobile).
+- A sequência é acionada nos disparos horizontais; os disparos em outros ângulos continuam usando as animações direcionais existentes.
+
+### Segurança da integração Gemini
+
+As chaves de API que estavam embutidas no HTML/JavaScript foram removidas desta cópia distribuída. Não coloque chaves privadas no navegador; configure a integração por um backend seguro antes de reativar chamadas ao Gemini.
+
+
+## 🆕 Animações compartilhadas dos inimigos (SpriteForge)
+
+Soldados, robôs e chefões utilizam diretamente os mesmos 48 arquivos PNG da protagonista, organizados em seis sequências de oito quadros: `idle`, `walk`, `run`, `jump`, `hit` e `death`. Não existem cópias de imagens por tipo de inimigo.
+
+Cada inimigo mantém seus próprios contadores e estado de animação. A identidade visual é diferenciada por filtro de cor e escala: soldados em vermelho, robôs em azul e chefões em roxo. Permanecem ativos a IA, os disparos, as colisões, as barras de vida, os átomos orbitantes, a aura e a coroa dos chefões.
+
+Os quadros ficam em `assets/<animacao>/frames/frame_000.png` até `frame_007.png`.
+
+### Validação local
+
+```bash
+node --check game.js
+python3 check_assets.py
+```
 

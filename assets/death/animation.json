@@ -1,0 +1,31 @@
+{
+  "animation": "death",
+  "character": "Juliette Psicose",
+  "frame_count": 8,
+  "fps": 10,
+  "frame_duration_ms": 100,
+  "total_duration_ms": 800,
+  "loop": false,
+  "playback": "once",
+  "dimensions": {
+    "width": 256,
+    "height": 256
+  },
+  "format": "PNG RGBA",
+  "background": "transparent; background key removed from generated sheet",
+  "layout": {
+    "columns": 4,
+    "rows": 2
+  },
+  "frames": [
+    "frames/frame_000.png",
+    "frames/frame_001.png",
+    "frames/frame_002.png",
+    "frames/frame_003.png",
+    "frames/frame_004.png",
+    "frames/frame_005.png",
+    "frames/frame_006.png",
+    "frames/frame_007.png"
+  ],
+  "source_note": "combined generated animation atlas"
+}

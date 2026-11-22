@@ -141,7 +141,16 @@ const playerImages = {
     arma_disparando_cima: new Image(),
     arma_disparando_frente: new Image(),
     arma_disparando_60_baixo: new Image(),
-    arma_disparando_90_graus: new Image()
+    arma_disparando_90_graus: new Image(),
+    // Sequência de ataque em oito quadros (10 FPS)
+    attackFrames: Array.from({ length: 8 }, () => new Image()),
+    // Novas animações 2D: oito quadros transparentes por ação
+    idleFrames: Array.from({ length: 8 }, () => new Image()),
+    walkFrames: Array.from({ length: 8 }, () => new Image()),
+    runFrames: Array.from({ length: 8 }, () => new Image()),
+    jumpFrames: Array.from({ length: 8 }, () => new Image()),
+    hitFrames: Array.from({ length: 8 }, () => new Image()),
+    deathFrames: Array.from({ length: 8 }, () => new Image())
 };
 
 // Carregar todas as imagens da Juliette
@@ -156,6 +165,26 @@ playerImages.arma_disparando_cima.src = 'assets/03 arma para cima disparando.png
 playerImages.arma_disparando_frente.src = 'assets/03 arma disparando para frente.png';
 playerImages.arma_disparando_60_baixo.src = 'assets/03 arma para cima disparando 60 graus para baixo.png';
 playerImages.arma_disparando_90_graus.src = 'assets/03 arma para cima disparando 90 graus.png';
+
+// Carregar os oito quadros da nova animação de ataque
+playerImages.attackFrames.forEach((image, index) => {
+    image.src = `assets/attack/attack_${String(index).padStart(3, '0')}.png`;
+});
+
+// Carregar as seis animações exportadas pelo SpriteForge Studio.
+// Cada sequência possui oito PNGs RGBA de 256x256 pixels.
+for (const [folder, frames] of Object.entries({
+    idle: playerImages.idleFrames,
+    walk: playerImages.walkFrames,
+    run: playerImages.runFrames,
+    jump: playerImages.jumpFrames,
+    hit: playerImages.hitFrames,
+    death: playerImages.deathFrames
+})) {
+    frames.forEach((image, index) => {
+        image.src = `assets/${folder}/frames/frame_${String(index).padStart(3, '0')}.png`;
+    });
+}
 
 // Imagens de fundo
 const backgroundImg = new Image();
@@ -205,6 +234,14 @@ const animations = {
         description: 'Ataque com arma horizontal' 
     },
     
+    // === NOVAS ANIMAÇÕES DE MOVIMENTO (SpriteForge, 8 quadros / 10 FPS) ===
+    idle: { type: 'frames', frames: playerImages.idleFrames, frameDurationTicks: 6, loop: true, duration: 48, description: 'Respiração em repouso' },
+    walk: { type: 'frames', frames: playerImages.walkFrames, frameDurationTicks: 6, loop: true, duration: 48, description: 'Caminhada' },
+    run: { type: 'frames', frames: playerImages.runFrames, frameDurationTicks: 6, loop: true, duration: 48, description: 'Corrida' },
+    jump: { type: 'frames', frames: playerImages.jumpFrames, frameDurationTicks: 6, loop: false, duration: 48, description: 'Salto' },
+    hit: { type: 'frames', frames: playerImages.hitFrames, frameDurationTicks: 6, loop: false, duration: 48, description: 'Impacto recebido' },
+    death: { type: 'frames', frames: playerImages.deathFrames, frameDurationTicks: 6, loop: false, duration: 48, description: 'Queda ao perder uma vida' },
+
     // === ANIMAÇÕES ESPECIAIS (sprites individuais) ===
     // Ações com correntes
     chain_left_hand: { 
@@ -260,12 +297,26 @@ const animations = {
         image: 'arma_disparando_90_graus', 
         duration: 15,
         description: 'Disparando em 90 graus' 
+    },
+
+    // Nova sequência animada de ataque frontal (8 quadros, 10 FPS)
+    weapon_attack_sequence: {
+        type: 'sequence',
+        frames: playerImages.attackFrames,
+        frameDurationTicks: 6, // 60 atualizações/s ÷ 10 FPS
+        duration: 48, // 8 quadros × 6 atualizações
+        description: 'Sequência de disparo com recuo e retorno'
     }
 };
 
 // Variáveis de controle do jogador
 let hasWeapon = false;
-let currentAnim = 'idle_noweapon';  // Começa parado SEM ARMA
+let currentAnim = 'idle';  // Começa com a nova animação de repouso
+let sequenceFrameIndex = 0;
+let sequenceFrameCounter = 0;
+let actionFrameIndex = 0;
+let actionFrameCounter = 0;
+let isRunning = false;
 let frameIndex = 0;
 let frameCounter = 0;
 let posX = 100;
@@ -1210,15 +1261,16 @@ function createEnemy(type = 'soldier') {
             jumpCooldown: 20 + Math.floor(Math.random() * 80)
         },
 
-        // Animação do sprite
+        // Estado de animação individual; os PNGs são compartilhados com Juliette.
         anim: {
-            frame: 1,
-            counter: 0,
-            speed: 8 + Math.floor(Math.random() * 6) // menor = mais rápido
+            state: 'idle',
+            frameIndex: 0,
+            frameCounter: 0,
+            frameDuration: 6
         },
 
         // Render
-        renderMode: enemy.usePlayerSprite ? 'playerSprite' : 'shape',
+        renderMode: 'spriteForge',
         tintColor: tintColor,
 
         // === NOVO: FORMA ALEATÓRIA ===
@@ -1379,6 +1431,83 @@ function checkEnemyPlatformCollisions(enemy) {
     }
 }
 
+// Banco de PNGs compartilhado com Juliette; cada inimigo mantém seu próprio frame.
+const enemyAnimationFrames = {
+    idle: playerImages.idleFrames,
+    walk: playerImages.walkFrames,
+    run: playerImages.runFrames,
+    jump: playerImages.jumpFrames,
+    hit: playerImages.hitFrames,
+    death: playerImages.deathFrames
+};
+
+function updateEnemyAnimationState(enemy) {
+    const next = enemy.isDying ? 'death' :
+        (enemy.hitTimer > 0 ? 'hit' :
+        (!enemy.onGround ? 'jump' :
+        (Math.abs(enemy.vx || 0) >= 1.5 ? 'run' :
+        (Math.abs(enemy.vx || 0) > 0.1 ? 'walk' : 'idle'))));
+    if (enemy.anim.state !== next) {
+        enemy.anim.state = next;
+        enemy.anim.frameIndex = 0;
+        enemy.anim.frameCounter = 0;
+    }
+}
+
+function advanceEnemyAnimation(enemy) {
+    const anim = enemy.anim;
+    if (!anim) return;
+    anim.frameCounter = (anim.frameCounter || 0) + 1;
+    if (anim.frameCounter < (anim.frameDuration || 6)) return;
+    anim.frameCounter = 0;
+    const frames = enemyAnimationFrames[anim.state] || enemyAnimationFrames.idle;
+    if (anim.state === 'idle' || anim.state === 'walk' || anim.state === 'run') {
+        anim.frameIndex = ((anim.frameIndex || 0) + 1) % frames.length;
+    } else {
+        anim.frameIndex = Math.min((anim.frameIndex || 0) + 1, frames.length - 1);
+        if (anim.state === 'hit' && anim.frameIndex === frames.length - 1) {
+            enemy.hitTimer = 0;
+            anim.state = 'idle';
+            anim.frameIndex = 0;
+            anim.frameCounter = 0;
+        }
+    }
+}
+
+function beginEnemyDeath(enemy) {
+    if (enemy.isDying) return;
+    enemy.isDying = true;
+    enemy.health = 0;
+    enemy.vx = 0;
+    enemy.vy = 0;
+    enemy.shootCooldown = 999999;
+    enemy.anim = { state: 'death', frameIndex: 0, frameCounter: 0, frameDuration: 6 };
+    if (enemy.deathRewarded) return;
+    enemy.deathRewarded = true;
+    const ex = enemy.x + (enemy.w || enemy.size) / 2;
+    const ey = enemy.y + (enemy.h || enemy.size) / 2;
+    createExplosion(ex, ey, enemy.isBoss ? 70 : 30);
+    gameState.score += enemy.type === 'robot' ? 200 : (enemy.isBoss ? 1000 : 100);
+    playSound('enemyDestroy', 300, 300);
+    gameState.enemiesDefeated++;
+    if (enemy.isBoss) {
+        gameState.bossesDefeated++;
+        gameState.lives += 10;
+        for (const key in weapons) {
+            if (typeof weapons[key].ammo === 'number') weapons[key].currentAmmo = 5000;
+        }
+    } else if (Math.random() < 0.3) {
+        createPowerup(enemy.x, enemy.y);
+    }
+    if (gameState.enemiesDefeated > 0 && gameState.enemiesDefeated % 30 === 0) {
+        const bossAlive = enemies.some(e => e.isBoss && !e.isDying);
+        if (!bossQueued && !bossAlive) {
+            queueBossSpawn();
+            requestGeminiScreenUpdate();
+        }
+    }
+}
+
 // Atualizar inimigos
 function updateEnemies() {
     const time = Date.now() * 0.001;
@@ -1391,7 +1520,16 @@ function updateEnemies() {
 
         // === IA AUTÔNOMA ===
         if (!enemy.ai) enemy.ai = { facingRight: false, changeDirTimer: 90, pauseTimer: 0, jumpCooldown: 60 };
-        if (!enemy.anim) enemy.anim = { frame: 1, counter: 0, speed: 10 };
+        if (!enemy.anim) enemy.anim = { state: 'idle', frameIndex: 0, frameCounter: 0, frameDuration: 6 };
+        if (enemy.isDying) {
+            advanceEnemyAnimation(enemy);
+            if (enemy.anim.frameIndex >= 7) {
+                const deadIndex = enemies.indexOf(enemy);
+                if (deadIndex !== -1) enemies.splice(deadIndex, 1);
+            }
+            continue;
+        }
+        if (enemy.hitTimer > 0) enemy.hitTimer--;
 
         // Pequena chance de "pausar" (parar e atirar)
         if (enemy.ai.pauseTimer > 0) {
@@ -1433,13 +1571,9 @@ function updateEnemies() {
         // Colisões com plataformas/chão
         checkEnemyPlatformCollisions(enemy);
 
-        // Animação do sprite (usar frames 1..5, row 0)
-        enemy.anim.counter++;
-        if (enemy.anim.counter >= enemy.anim.speed) {
-            enemy.anim.counter = 0;
-            enemy.anim.frame++;
-            if (enemy.anim.frame > 5) enemy.anim.frame = 1;
-        }
+        // Animação SpriteForge compartilhada; estado e temporização são individuais.
+        updateEnemyAnimationState(enemy);
+        advanceEnemyAnimation(enemy);
 
         // Cooldown de tiro
         if (enemy.shootCooldown > 0) enemy.shootCooldown--;
@@ -1659,18 +1793,18 @@ function triggerShootAnimation(angle) {
     while (normalizedAngle >= 360) normalizedAngle -= 360;
     
     // Selecionar animação baseada no ângulo
-    let selectedAnimation = 'weapon_shoot_front'; // padrão
+    let selectedAnimation = 'weapon_attack_sequence'; // padrão
     
     // Mapear ângulos para animações específicas
     if ((normalizedAngle >= 315 && normalizedAngle <= 360) || (normalizedAngle >= 0 && normalizedAngle <= 45)) {
         // Tiros horizontais (direita e diagonais próximas) - 0°, ±15°, ±30°, ±45°
-        selectedAnimation = 'weapon_shoot_front';
+        selectedAnimation = 'weapon_attack_sequence';
     } else if (normalizedAngle >= 46 && normalizedAngle <= 134) {
         // Tiros para baixo (45° a 135°) - usa animação de 60° para baixo
         selectedAnimation = 'weapon_shoot_diagonal_down';
     } else if (normalizedAngle >= 135 && normalizedAngle <= 225) {
         // Tiros para esquerda e diagonais (135° a 225°)
-        selectedAnimation = 'weapon_shoot_front'; // Mesmo sprite, mas espelhado
+        selectedAnimation = 'weapon_attack_sequence'; // Sequência espelhada quando necessário
     } else if (normalizedAngle >= 226 && normalizedAngle <= 314) {
         // Tiros para cima (226° a 314°) - usa animações para cima
         if (normalizedAngle >= 270 - 20 && normalizedAngle <= 270 + 20) {
@@ -1690,15 +1824,25 @@ function triggerShootAnimation(angle) {
 }
 
 // Iniciar animação especial
-function startSpecialAnimation(animName) {
+function startSpecialAnimation(animName, returnTo = null) {
     const anim = animations[animName];
-    if (anim && anim.type === 'sprite') {
-        previousAnim = currentAnim;
+    if (anim && (anim.type === 'sprite' || anim.type === 'sequence' || anim.type === 'frames')) {
+        if ((anim.type === 'sequence' || anim.type === 'frames') &&
+            (!anim.frames || anim.frames.length !== 8 ||
+             !anim.frames.every(image => image.complete && image.naturalWidth > 0))) {
+            console.warn(`Animação ${animName} ainda não está totalmente carregada.`);
+            return;
+        }
+        previousAnim = returnTo || currentAnim;
         currentAnim = animName;
-        specialAnimTimer = anim.duration;
+        specialAnimTimer = anim.duration || 48;
         isInSpecialAnim = true;
         frameIndex = 0;
         frameCounter = 0;
+        sequenceFrameIndex = 0;
+        sequenceFrameCounter = 0;
+        actionFrameIndex = 0;
+        actionFrameCounter = 0;
     }
 }
 
@@ -1775,6 +1919,7 @@ function dealChainDamage(handType) {
     
     for (let i = enemies.length - 1; i >= 0; i--) {
         const enemy = enemies[i];
+        if (enemy.isDying) continue;
         const distance = Math.sqrt(
             Math.pow(enemy.x + enemy.size/2 - playerCenterX, 2) +
             Math.pow(enemy.y + enemy.size/2 - playerCenterY, 2)
@@ -1783,10 +1928,12 @@ function dealChainDamage(handType) {
         if (distance <= range) {
             enemy.health -= damage;
             createExplosion(enemy.x + enemy.size/2, enemy.y + enemy.size/2, 20);
-            
-            if (enemy.health <= 0) {
-                gameState.score += enemy.type === 'robot' ? 200 : 100;
-                enemies.splice(i, 1);
+            if (enemy.health <= 0) beginEnemyDeath(enemy);
+            else {
+                enemy.hitTimer = 48;
+                enemy.anim.state = 'hit';
+                enemy.anim.frameIndex = 0;
+                enemy.anim.frameCounter = 0;
             }
         }
     }
@@ -1794,6 +1941,21 @@ function dealChainDamage(handType) {
 
 // Atualizar animações especiais
 function updateSpecialAnimations() {
+    // Avançar sequências a 10 FPS (6 ciclos por quadro em desktop 60 Hz).
+    if (isInSpecialAnim && currentAnim === 'weapon_attack_sequence') {
+        sequenceFrameCounter++;
+        if (sequenceFrameCounter >= animations.weapon_attack_sequence.frameDurationTicks) {
+            sequenceFrameCounter = 0;
+            sequenceFrameIndex = Math.min(sequenceFrameIndex + 1, 7);
+        }
+    } else if (isInSpecialAnim && animations[currentAnim]?.type === 'frames') {
+        actionFrameCounter++;
+        if (actionFrameCounter >= animations[currentAnim].frameDurationTicks) {
+            actionFrameCounter = 0;
+            actionFrameIndex = Math.min(actionFrameIndex + 1, 7);
+        }
+    }
+
     // Atualizar timer de animação especial
     if (isInSpecialAnim && specialAnimTimer > 0) {
         specialAnimTimer--;
@@ -1802,6 +1964,8 @@ function updateSpecialAnimations() {
             // Voltar à animação anterior
             currentAnim = previousAnim;
             isInSpecialAnim = false;
+            actionFrameIndex = 0;
+            actionFrameCounter = 0;
             
             // Resetar estados especiais
             chainWeaponActive = false;
@@ -1827,7 +1991,7 @@ function drawPlayer() {
     let currentScale = scale; // Escala padrão
     
     // Se é sprite de tiro, usar escala específica de tiro
-    if (anim.type === 'sprite' && (currentAnim.includes('shoot') || currentAnim.includes('weapon_shoot'))) {
+    if ((anim.type === 'sprite' || anim.type === 'sequence') && (currentAnim.includes('shoot') || currentAnim.includes('weapon_shoot') || currentAnim === 'weapon_attack_sequence')) {
         currentScale = shootingScale;
     }
     
@@ -1841,10 +2005,32 @@ function drawPlayer() {
     const adjustedPosX = posX + offsetX;
     const adjustedPosY = posY + offsetY;
     
-    // Verificar se é animação especial (sprite individual)
-    if (anim.type === 'sprite') {
-        const spriteImage = playerImages[anim.image];
-        if (spriteImage && spriteImage.complete) {
+    // Novos quadros 256x256: desenhar em área independente da colisão 48x64.
+    // O canvas de cada quadro é centralizado e ancorado pelos pés.
+    if (anim.type === 'frames') {
+        const spriteImage = anim.frames[actionFrameIndex];
+        if (spriteImage && spriteImage.complete && spriteImage.naturalWidth > 0) {
+            const drawSize = 110;
+            const collisionWidth = frameWidth * scale;
+            const collisionHeight = frameHeight * scale;
+            const drawX = posX + collisionWidth / 2 - drawSize / 2;
+            const drawY = posY + collisionHeight - drawSize;
+            ctx.save();
+            if (!facingRight) {
+                ctx.translate(posX + collisionWidth / 2, 0);
+                ctx.scale(-1, 1);
+                ctx.drawImage(spriteImage, -drawSize / 2, drawY, drawSize, drawSize);
+            } else {
+                ctx.drawImage(spriteImage, drawX, drawY, drawSize, drawSize);
+            }
+            ctx.restore();
+        }
+    // Verificar se é sprite individual ou quadro de uma sequência animada
+    } else if (anim.type === 'sprite' || anim.type === 'sequence') {
+        const spriteImage = anim.type === 'sequence'
+            ? anim.frames[sequenceFrameIndex]
+            : playerImages[anim.image];
+        if (spriteImage && spriteImage.complete && spriteImage.naturalWidth > 0) {
             ctx.save();
             
             // Espelhar se necessário
@@ -1864,6 +2050,12 @@ function drawPlayer() {
             }
             
             ctx.restore();
+        } else if (anim.type === 'sequence') {
+            const fallbackImage = playerImages.arma_disparando_frente;
+            if (fallbackImage && fallbackImage.complete && fallbackImage.naturalWidth > 0) {
+                ctx.drawImage(fallbackImage, adjustedPosX, adjustedPosY,
+                    frameWidth * currentScale, frameHeight * currentScale);
+            }
         }
     } else {
         // Animação normal do spritesheet
@@ -2090,29 +2282,28 @@ function drawAimIndicator() {
 
 // Função para atualizar o estado da animação
 function updateAnimationState() {
-    // Atualiza se tem arma equipada
     hasWeapon = (weaponType !== 'none');
-    
-    let newAnim = currentAnim;
-    
-    // Determina qual animação deve estar ativa baseada no estado e na arma
-    if (attacking && hasWeapon) {
-        newAnim = 'attack_weapon';
-    } else if (moving && hasWeapon) {
-        newAnim = 'walk_weapon';
-    } else if (moving && !hasWeapon) {
-        newAnim = 'walk_noweapon';
-    } else if (!moving && hasWeapon) {
-        newAnim = 'idle_weapon';
+
+    // Impacto/morte e animações especiais têm prioridade sobre movimento.
+    if (isInSpecialAnim) return;
+
+    let newAnim;
+    if (!onGround) {
+        newAnim = 'jump';
+    } else if (moving && (keys['ShiftLeft'] || keys['ShiftRight'])) {
+        newAnim = 'run';
+    } else if (moving) {
+        newAnim = 'walk';
     } else {
-        newAnim = 'idle_noweapon';
+        newAnim = 'idle';
     }
-    
-    // Se mudou de animação, reseta o frame
+
     if (newAnim !== currentAnim) {
         currentAnim = newAnim;
-        frameIndex = animations[currentAnim].start;
+        frameIndex = 0;
         frameCounter = 0;
+        actionFrameIndex = 0;
+        actionFrameCounter = 0;
     }
 }
 
@@ -2131,6 +2322,7 @@ function checkCollisions() {
         if (bullet.type !== 'enemy') {
             for (let j = enemies.length - 1; j >= 0; j--) {
                 const enemy = enemies[j];
+                if (enemy.isDying) continue;
                 const ew = enemy.w || enemy.size;
                 const eh = enemy.h || enemy.size;
                 if (bullet.x < enemy.x + ew &&
@@ -2138,51 +2330,17 @@ function checkCollisions() {
                     bullet.y < enemy.y + eh &&
                     bullet.y + bullet.size > enemy.y) {
                     
-        // Inimigo levou dano
+                    // Impacto: iniciar a animação hit sem interromper a IA.
                     enemy.health -= bullet.damage;
                     bullets.splice(i, 1);
-                    
-                    // Som de acerto no inimigo
                     playSound('enemyHit', 600, 100);
-                    
                     if (enemy.health <= 0) {
-                        // Inimigo morreu
-                        const ex = enemy.x + (enemy.w || enemy.size) / 2;
-                        const ey = enemy.y + (enemy.h || enemy.size) / 2;
-                        createExplosion(ex, ey, enemy.isBoss ? 70 : 30);
-                        gameState.score += enemy.type === 'robot' ? 200 : (enemy.isBoss ? 1000 : 100);
-                        
-                        // Som de destruição do inimigo
-                        playSound('enemyDestroy', 300, 300);
-                        
-                        // Contabilizar inimigo derrotado e checar boss
-                        gameState.enemiesDefeated++;
-                        if (enemy.isBoss) {
-                            gameState.bossesDefeated++;
-                            // Recompensas do chefão: +10 vidas e recarga de todas as armas para 5000
-                            gameState.lives += 10;
-                            for (const key in weapons) {
-                                if (typeof weapons[key].ammo === 'number') {
-                                    weapons[key].currentAmmo = 5000;
-                                }
-                            }
-                        } else {
-                            // Chance de dropar power-up
-                            if (Math.random() < 0.3) {
-                                createPowerup(enemy.x, enemy.y);
-                            }
-                        }
-                        
-                        enemies.splice(j, 1);
-
-        // A cada 30 inimigos derrotados, spawnar chefão gigante e pedir nova "tela" à IA
-        if (gameState.enemiesDefeated > 0 && gameState.enemiesDefeated % 30 === 0) {
-            const bossAlive = enemies.some(e => e.isBoss);
-            if (!bossQueued && !bossAlive) {
-                queueBossSpawn();
-                requestGeminiScreenUpdate();
-            }
-        }
+                        beginEnemyDeath(enemy);
+                    } else {
+                        enemy.hitTimer = 48;
+                        enemy.anim.state = 'hit';
+                        enemy.anim.frameIndex = 0;
+                        enemy.anim.frameCounter = 0;
                     }
                     break;
                 }
@@ -2252,8 +2410,9 @@ function checkCollisions() {
                 invulnerable = true;
                 invulnerableTime = 120; // 2 segundos de invulnerabilidade
                 
-                // Som de dano no jogador
+                // Som e animação de impacto ao receber dano.
                 playSound('playerHit', 200, 400);
+                startSpecialAnimation('hit');
                 
                 // Log para debug
                 console.log(`Fase ${gameState.currentPhase}: Tiro ${gameState.hitsReceived}/${maxHits}, Vida: ${playerHealth}`);
@@ -2261,9 +2420,12 @@ function checkCollisions() {
                 if (playerHealth <= 0 || gameState.hitsReceived >= maxHits) {
                     gameState.lives--;
                     if (gameState.lives <= 0) {
+                        startSpecialAnimation('death', 'idle');
                         gameState.gameOver = true;
                         playSound('gameOver', 150, 1000);
                     } else {
+                        // A animação de queda é exibida ao perder uma vida; depois retorna ao jogo.
+                        startSpecialAnimation('death', 'idle');
                         playerHealth = 100;
                         gameState.hitsReceived = 0; // Resetar contador de tiros
                         weaponType = 'normal'; // Perde power-ups
@@ -2384,7 +2546,7 @@ function drawEnemies() {
         const pulseIntensity = Math.sin(time * 4 + enemy.y * 0.01) * 0.2 + 0.8;
 
         // === NOVO: inimigos usando o mesmo spritesheet da personagem principal ===
-        if (enemy.renderMode === 'playerSprite' && playerImages.spritesheet && playerImages.spritesheet.complete) {
+        if (enemy.renderMode === 'spriteForge') {
             ctx.save();
 
             // Configurar brilho baseado no tipo de inimigo
@@ -2403,12 +2565,14 @@ function drawEnemies() {
                 ctx.shadowBlur = 10 * glowIntensity;
             }
 
-            // Usar frames 1..5 na row 0 (caminhada com arma) como animação
-            const frame = enemy.anim?.frame ?? 1;
-            const sx = frame * frameWidth;
-            const sy = 0 * frameHeight;
-
+            // PNG SpriteForge: mesma referência de imagem da Juliette, sem cópias.
+            const animState = enemy.anim?.state || 'idle';
+            const frames = enemyAnimationFrames[animState] || enemyAnimationFrames.idle;
+            const spriteImage = frames?.[enemy.anim?.frameIndex || 0];
             const facingRight = !!enemy.ai?.facingRight;
+            const drawSize = 110 * (enemy.isBoss ? 2.4 : (enemy.type === 'robot' ? 1.15 : 1));
+            const drawX = enemy.x + w / 2 - drawSize / 2;
+            const drawY = enemy.y + h - drawSize;
 
             // === DESENHAR AURA DO CHEFÃO (ANTES DO SPRITE) ===
             if (enemy.isBoss) {
@@ -2424,46 +2588,29 @@ function drawEnemies() {
                 ctx.fillRect(enemy.x - auraSize/2, enemy.y - auraSize/2, w + auraSize, h + auraSize);
             }
 
-            if (!facingRight) {
-                // Espelhar para a esquerda
-                ctx.scale(-1, 1);
-                ctx.drawImage(
-                    playerImages.spritesheet,
-                    sx, sy, frameWidth, frameHeight,
-                    -(enemy.x + w), enemy.y,
-                    w, h
-                );
-            } else {
-                ctx.drawImage(
-                    playerImages.spritesheet,
-                    sx, sy, frameWidth, frameHeight,
-                    enemy.x, enemy.y,
-                    w, h
-                );
+            if (spriteImage && spriteImage.complete && spriteImage.naturalWidth > 0) {
+                ctx.save();
+                // Diferenciação visual por classe sem duplicar PNGs.
+                // O filtro afeta somente a imagem desenhada e preserva sua transparência.
+                if (enemy.isBoss) {
+                    ctx.filter = 'sepia(1) saturate(5) hue-rotate(245deg)';
+                } else if (enemy.type === 'robot') {
+                    ctx.filter = 'sepia(1) saturate(5) hue-rotate(175deg)';
+                } else {
+                    ctx.filter = 'sepia(1) saturate(5) hue-rotate(315deg)';
+                }
+                if (!facingRight) {
+                    ctx.translate(enemy.x + w / 2, 0);
+                    ctx.scale(-1, 1);
+                    ctx.drawImage(spriteImage, -drawSize / 2, drawY, drawSize, drawSize);
+                } else {
+                    ctx.drawImage(spriteImage, drawX, drawY, drawSize, drawSize);
+                }
+                ctx.restore();
             }
 
-            // Tinta colorida por tipo - MAIS INTENSA para o chefão
-            if (enemy.isBoss) {
-                // Chefão: tinta ROXA MUITO MAIS FORTE e VIBRANTE
-                ctx.globalAlpha = 0.55; // Muito mais opaco (era 0.18)
-                const bossTintPulse = Math.sin(time * 5) * 0.15 + 0.55;
-                ctx.globalCompositeOperation = 'multiply'; // Efeito de multiplicação para cor mais intensa
-                ctx.fillStyle = enemy.tintColor || '#8B00FF';
-                ctx.fillRect(enemy.x, enemy.y, w, h);
-                
-                // Segunda camada de cor para intensificar ainda mais
-                ctx.globalCompositeOperation = 'screen'; // Efeito de tela para brilho
-                ctx.globalAlpha = bossTintPulse * 0.4;
-                ctx.fillStyle = '#FF00FF'; // Magenta brilhante
-                ctx.fillRect(enemy.x, enemy.y, w, h);
-                
-                ctx.globalCompositeOperation = 'source-over'; // Restaurar modo normal
-            } else {
-                // Inimigos normais: tinta leve
-                ctx.globalAlpha = 0.13;
-                ctx.fillStyle = enemy.tintColor || '#FF0000';
-                ctx.fillRect(enemy.x, enemy.y, w, h);
-            }
+            // Soldados, robôs e chefões compartilham os mesmos quadros; somente o filtro,
+            // a escala e os efeitos de classe diferenciam sua apresentação.
 
             // === DESENHAR COROA/INDICADOR DE CHEFÃO ===
             if (enemy.isBoss) {
@@ -3930,8 +4077,8 @@ function gameLoop(currentTime) {
     }
     lastFrameTime = currentTime;
     
-    if (gameState.gameOver) {
-        // Desenha tela de game over
+    if (gameState.gameOver && !(isInSpecialAnim && currentAnim === 'death')) {
+        // Desenha tela de game over somente depois de concluir a animação de morte
         ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
         ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
         ctx.fillStyle = 'white';
@@ -4004,20 +4151,23 @@ function gameLoop(currentTime) {
         updateAnimationState();
     }
     
-    // Atualiza animação do jogador
+    // Avanço do spritesheet legado somente quando a animação possui start/end/speed.
+    // As animações SpriteForge e a sequência de ataque têm seus próprios contadores.
     const anim = animations[currentAnim];
-    
-    if (currentAnim !== 'idle' || anim.end > anim.start) {
+    if (anim && anim.type === 'spritesheet' &&
+        Number.isFinite(anim.start) && Number.isFinite(anim.end) && Number.isFinite(anim.speed)) {
         frameCounter++;
         if (frameCounter >= anim.speed) {
             frameCounter = 0;
             frameIndex++;
-            if (frameIndex > anim.end) {
-                frameIndex = anim.start;
-                if (currentAnim === 'attack') {
-                    attacking = false;
-                }
-            }
+            if (frameIndex > anim.end) frameIndex = anim.start;
+        }
+    } else if (anim && anim.type === 'frames' && !isInSpecialAnim) {
+        actionFrameCounter++;
+        if (actionFrameCounter >= anim.frameDurationTicks) {
+            actionFrameCounter = 0;
+            if (anim.loop) actionFrameIndex = (actionFrameIndex + 1) % anim.frames.length;
+            else if (actionFrameIndex < anim.frames.length - 1) actionFrameIndex++;
         }
     }
     
@@ -4079,9 +4229,15 @@ function restartGame() {
     gameState.hitsReceived = 0;
     
     // Resetar jogador
-    currentAnim = 'idle_noweapon';
+    currentAnim = 'idle';
     frameIndex = 0;
     frameCounter = 0;
+    actionFrameIndex = 0;
+    actionFrameCounter = 0;
+    sequenceFrameIndex = 0;
+    sequenceFrameCounter = 0;
+    specialAnimTimer = 0;
+    isInSpecialAnim = false;
     posX = 100;
 
     // Resetar mira 360°
@@ -4138,39 +4294,39 @@ function restartGame() {
     enemySpawnTimer = 0;
 }
 
-// Inicia o jogo quando todas as imagens carregarem
+// Inicia o jogo quando todas as imagens necessárias carregarem (ou falharem).
+// O contador é calculado dinamicamente para incluir ataque e as seis animações novas.
+const requiredGameImages = [
+    sceneImg, backgroundImg, backgroundImgA, backgroundImgPhase2,
+    ...Object.values(playerImages).flatMap(value => Array.isArray(value) ? value : [value])
+];
 let imagesLoaded = 0;
-const totalImages = 13; // Total de imagens: 4 de fundo (incluindo fase 2) + 9 da Juliette (incluindo novas de tiro)
+const totalImages = requiredGameImages.length;
+let gameStarted = false;
 
-function checkImagesLoaded() {
+function checkImagesLoaded(image) {
     imagesLoaded++;
-    console.log(`Imagem carregada: ${imagesLoaded}/${totalImages}`);
-    if (imagesLoaded === totalImages) {
-        frameIndex = animations.idle_noweapon.start;
-        console.log('Todas as imagens carregadas! Iniciando jogo...');
+    if (!image.complete || image.naturalWidth === 0) {
+        console.error('Falha ao carregar imagem do jogo:', image.src);
+    }
+    console.log(`Imagens processadas: ${imagesLoaded}/${totalImages}`);
+    if (imagesLoaded >= totalImages && !gameStarted) {
+        gameStarted = true;
+        actionFrameIndex = 0;
+        console.log('Carregamento concluído. Iniciando Juliette Psicose 2D...');
         gameLoop();
     }
 }
 
-// Carregar imagens de fundo
-sceneImg.onload = checkImagesLoaded;
-backgroundImg.onload = checkImagesLoaded;
-backgroundImgA.onload = checkImagesLoaded;
-// === CARREGAR IMAGEM DA FASE 2 ===
-backgroundImgPhase2.onload = checkImagesLoaded;
-
-// Carregar sprites da Juliette
-playerImages.spritesheet.onload = checkImagesLoaded;
-playerImages.corrente_mao_esquerda.onload = checkImagesLoaded;
-playerImages.corrente_duas_maos.onload = checkImagesLoaded;
-playerImages.maos_para_cima.onload = checkImagesLoaded;
-playerImages.arma_para_cima.onload = checkImagesLoaded;
-
-// Carregar novas imagens de tiro
-playerImages.arma_disparando_cima.onload = checkImagesLoaded;
-playerImages.arma_disparando_frente.onload = checkImagesLoaded;
-playerImages.arma_disparando_60_baixo.onload = checkImagesLoaded;
-playerImages.arma_disparando_90_graus.onload = checkImagesLoaded;
+requiredGameImages.forEach(image => {
+    if (image.complete) {
+        // Imagens já resolvidas antes da instalação dos listeners.
+        queueMicrotask(() => checkImagesLoaded(image));
+    } else {
+        image.addEventListener('load', () => checkImagesLoaded(image), { once: true });
+        image.addEventListener('error', () => checkImagesLoaded(image), { once: true });
+    }
+});
 
 // === SISTEMA DE TELA CHEIA ===
 let isFullscreen = false;
