@@ -1,0 +1,7 @@
+COLOQUE AQUI OS 64 PNGs DA ANIMACAO DE DISPARO.
+
+Nomes esperados:
+frame_000.png ate frame_063.png
+
+Caminho completo esperado: assets/Shoot/frame_000.png ... assets/Shoot/frame_063.png
+Os arquivos precisam manter esses nomes e estar em PNG.
